@@ -9,7 +9,6 @@ from contextlib import asynccontextmanager
 from time import perf_counter
 import os
 
-import pydantic
 from fastapi import Depends, FastAPI, UploadFile, responses
 from nc_py_api import AsyncNextcloudApp, NextcloudApp
 from nc_py_api.ex_app import LogLvl, anc_app, run_app, set_handlers, persistent_storage
