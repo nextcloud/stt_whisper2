@@ -18,6 +18,12 @@ help:
 	@echo "  "
 	@echo "  register          perform registration of running Txt2TxtProvider into the 'manual_install' deploy daemon."
 
+.PHONY: download-mnodels
+download-models:
+	cd models \
+	&& git clone https://huggingface.co/Systran/faster-whisper-large-v2 \
+	&& git clone https://huggingface.co/Systran/faster-whisper-medium.en
+
 .PHONY: build-push
 build-push:
 	docker login ghcr.io
