@@ -12,23 +12,24 @@ import os
 import pydantic
 from fastapi import Depends, FastAPI, UploadFile, responses
 from nc_py_api import AsyncNextcloudApp, NextcloudApp
-from nc_py_api.ex_app import LogLvl, anc_app, run_app, set_handlers
+from nc_py_api.ex_app import LogLvl, anc_app, run_app, set_handlers, persistent_storage
 from faster_whisper import WhisperModel
-import torch
-
-cuda = torch.cuda.is_available()
-
-models = {}
 
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-for file in os.scandir(dir_path + "/../models/"):
-    if os.path.isdir(file.path):
-        if cuda:
+def load_models():
+    models = {}
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    for file in os.scandir(dir_path + "/../models/"):
+        if os.path.isdir(file.path):
             models[file.name] = lambda: WhisperModel(file.path, device="cpu", compute_type="int8_float16")
-        else:
-            models[file.name] = lambda: WhisperModel(file.path, device="cuda", compute_type="int8")
+    for file in os.scandir(persistent_storage()):
+        if os.path.isdir(file.path):
+            models[file.name] = lambda: WhisperModel(file.path, device="cpu", compute_type="int8_float16")
 
+    return models
+
+
+models = load_models()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
