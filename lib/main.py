@@ -20,12 +20,15 @@ def load_models():
     dir_path = os.path.dirname(os.path.realpath(__file__))
     for file in os.scandir(dir_path + "/../models/"):
         if os.path.isdir(file.path):
-            models[file.name] = lambda: WhisperModel(file.path, device="cpu")
+            models[file.name] = create_model_loader(file.path)
     for file in os.scandir(persistent_storage()):
         if os.path.isdir(file.path):
-            models[file.name] = lambda: WhisperModel(file.path, device="cpu")
+            models[file.name] = create_model_loader(file.path)
 
     return models
+
+def create_model_loader(file_path):
+    return lambda: WhisperModel(file_path, device="cpu")
 
 
 models = load_models()
