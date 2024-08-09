@@ -27,7 +27,7 @@ download-models:
 .PHONY: build-push
 build-push:
 	docker login ghcr.io
-	docker buildx build --push --platform linux/amd64,linux/arm64/v8 --tag ghcr.io/nextcloud/stt_whisper2:1.1.3 .
+	docker buildx build --push --platform linux/amd64,linux/arm64/v8 --tag ghcr.io/nextcloud/stt_whisper2:1.1.5 .
 
 .PHONY: deploy
 deploy:
