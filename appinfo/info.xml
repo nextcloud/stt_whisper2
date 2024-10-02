@@ -16,6 +16,7 @@
 	<website>https://github.com/nextcloud/stt_whisper2</website>
 	<bugs>https://github.com/nextcloud/stt_whisper2/issues</bugs>
 	<repository type="git">https://github.com/nextcloud/stt_whisper2</repository>
+	<screenshot>https://raw.githubusercontent.com/nextcloud/stt_whisper2/main/screenshots/Logo.png</screenshot>
 	<dependencies>
 		<nextcloud min-version="29" max-version="30"/>
 	</dependencies>
