@@ -10,9 +10,16 @@ from time import perf_counter
 import os
 
 from fastapi import Depends, FastAPI, UploadFile, responses
-from nc_py_api import AsyncNextcloudApp, NextcloudApp
-from nc_py_api.ex_app import LogLvl, anc_app, run_app, set_handlers, persistent_storage
 from faster_whisper import WhisperModel
+from nc_py_api import AsyncNextcloudApp, NextcloudApp
+from nc_py_api.ex_app import (
+    anc_app,
+    get_computation_device,
+    LogLvl,
+    persistent_storage,
+    run_app,
+    set_handlers,
+)
 
 
 def load_models():
@@ -28,7 +35,11 @@ def load_models():
     return models
 
 def create_model_loader(file_path):
-    return lambda: WhisperModel(file_path, device="cpu")
+    device = get_computation_device().lower()
+    if device != "cuda":  # other GPUs are currently not supported by Whisper
+        device = "cpu"
+
+    return lambda: WhisperModel(file_path, device=device)
 
 
 models = load_models()
