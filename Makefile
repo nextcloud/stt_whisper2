@@ -21,13 +21,13 @@ help:
 .PHONY: download-mnodels
 download-models:
 	cd models \
-	&& git clone https://huggingface.co/Systran/faster-whisper-large-v2 \
+	&& git clone https://huggingface.co/Systran/faster-whisper-large-v3 \
 	&& git clone https://huggingface.co/Systran/faster-whisper-medium.en
 
 .PHONY: build-push
 build-push:
 	docker login ghcr.io
-	docker buildx build --push --platform linux/amd64,linux/arm64/v8 --tag ghcr.io/nextcloud/stt_whisper2:1.1.5 .
+	docker buildx build --push --platform linux/amd64,linux/arm64/v8 --tag ghcr.io/nextcloud/stt_whisper2:2.0.0 .
 
 .PHONY: deploy
 deploy:
