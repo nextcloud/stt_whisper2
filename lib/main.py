@@ -1,19 +1,17 @@
-"""Tha main module of the llm2 app
-"""
-
-import queue
 import threading
-import tempfile
-import typing
 from contextlib import asynccontextmanager
-from time import perf_counter
+from time import perf_counter, sleep
 import os
+import logging
 
-from fastapi import Depends, FastAPI, UploadFile, responses
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', handlers=[logging.StreamHandler()])
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+from fastapi import FastAPI
 from faster_whisper import WhisperModel
 from nc_py_api import AsyncNextcloudApp, NextcloudApp
 from nc_py_api.ex_app import (
-    anc_app,
     get_computation_device,
     LogLvl,
     persistent_storage,
@@ -21,6 +19,8 @@ from nc_py_api.ex_app import (
     set_handlers,
 )
 
+from nc_py_api.ex_app.providers.task_processing import TaskProcessingProvider
+from ocs import ocs
 
 def load_models():
     models = {}
@@ -55,70 +55,82 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+def log(nc, level, content):
+    logger.log((level+1)*10, content)
+    try:
+        nc.log(level, content)
+    except:
+        pass
+
 APP = FastAPI(lifespan=lifespan)
-TASK_LIST: queue.Queue = queue.Queue(maxsize=100)
+
+def get_file(nc, task_id, file_id):
+    return ocs(nc._session, 'GET',f"/ocs/v2.php/taskprocessing/tasks_provider/{task_id}/file/{file_id}")
 
 
 class BackgroundProcessTask(threading.Thread):
     def run(self, *args, **kwargs):  # pylint: disable=unused-argument
+        nc = NextcloudApp()
         while True:
-            task = TASK_LIST.get(block=True)
             try:
-                model_name = task.get("model")
-                print(f"model: {model_name}")
+                next = nc.providers.task_processing.next_task([f'stt_whisper2:{model_name}' for model_name, _ in models.items()], ['core:audio2text'])
+                if not 'task' in next or next is None:
+                    sleep(5)
+                    continue
+                task = next.get('task')
+            except Exception as e:
+                print(str(e))
+                log(nc, LogLvl.ERROR, str(e))
+                sleep(5)
+                continue
+            try:
+                log(nc, LogLvl.INFO, f"Next task: {task['id']}")
+                model_name = next.get("provider").get('name').split(':', 2)[1]
+                log(nc, LogLvl.INFO, f"model: {model_name}")
                 model_load = models.get(model_name)
                 if model_load is None:
-                    NextcloudApp().providers.speech_to_text.report_result(
-                        task["id"], error="Requested model is not available"
+                    NextcloudApp().providers.task_processing.report_result(
+                        task["id"], None, "Requested model is not available"
                     )
                     continue
                 model = model_load()
-                print("generating transcription")
+
+                log(nc, LogLvl.INFO, "generating transcription")
                 time_start = perf_counter()
-                with task.get("file") as tmp:
-                    segments, _ = model.transcribe(tmp.name)
+                file_name = get_file(nc, task["id"], task.get("input").get('input'))
+                segments, _ = model.transcribe(file_name)
                 del model
-                print(f"transcription generated: {perf_counter() - time_start}s")
+                log(nc, LogLvl.INFO, f"transcription generated: {perf_counter() - time_start}s")
+
                 transcript = ''
                 for segment in segments:
                     transcript += segment.text
-                NextcloudApp().providers.speech_to_text.report_result(
+                NextcloudApp().providers.task_processing.report_result(
                     task["id"],
-                    str(transcript),
+                    {'output': str(transcript)},
                 )
             except Exception as e:  # noqa
                 print(str(e))
-                nc = NextcloudApp()
-                nc.log(LogLvl.ERROR, str(e))
-                nc.providers.speech_to_text.report_result(task["id"], error=str(e))
-
-
-
-@APP.post("/model/{model_name}")
-async def tiny_llama(
-    _nc: typing.Annotated[AsyncNextcloudApp, Depends(anc_app)],
-    data: UploadFile,
-    task_id: int,
-    model_name=None,
-):
-    _, file_extension = os.path.splitext(data.filename)
-    task_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=f"{file_extension}")
-    task_file.write(await data.read())
-    try:
-        TASK_LIST.put({"file": task_file, "id": task_id, "model": model_name}, block=False)
-    except queue.Full:
-        return responses.JSONResponse(content={"error": "task queue is full"}, status_code=429)
-    return responses.Response()
+                try:
+                    log(nc, LogLvl.ERROR, str(e))
+                    nc.providers.task_processing.report_result(task["id"], None, str(e))
+                except:
+                    pass
 
 
 async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
     print(f"enabled={enabled}")
     if enabled is True:
         for model_name, _ in models.items():
-            await nc.providers.speech_to_text.register('stt_whisper2:'+model_name, "Local Whisper Speech To text: " + model_name, '/model/'+model_name)
+            await nc.providers.task_processing.register(TaskProcessingProvider(
+                id=f'stt_whisper2:{model_name}',
+                name='Nextcloud Local Speech-To-Text Whisper: '+model_name,
+                task_type='core:audio2text',
+                expected_runtime=120,
+            ))
     else:
         for model_name, _ in models.items():
-            await nc.providers.speech_to_text.unregister('stt_whisper2:'+model_name)
+            await nc.providers.task_processing.unregister(f'stt_whisper2:{model_name}', True)
     return ""
 
 
