@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.1.0] - 2025-01-07
+
+### New
+
+- Support for NC 31
+- New License: AGPL-3.0
+
 ## [2.0.1] - 2024-11-26
 
 ### Fixed

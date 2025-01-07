@@ -2,13 +2,27 @@
 <info>
 	<id>stt_whisper2</id>
 	<name>Local Whisper Speech To Text</name>
-	<summary>Local Whisper Speech To Text</summary>
+	<summary>A Local Whisper implementation for Speech To Text</summary>
 	<description>
 	<![CDATA[
 **Requires [`AppAPI`](https://github.com/cloud-py-api/app_api) to work.**
+
+Read the Documentation: https://docs.nextcloud.com/server/latest/admin_manual/ai/app_stt_whisper2.html
+
+## Ethical AI Rating
+### Rating: 🟡
+
+Positive:
+* the software for training and inference of this model is open source
+* the trained model is freely available, and thus can be run on-premises
+
+Negative:
+* the training data is not freely available, limiting the ability of external parties to check and correct for bias or optimise the model’s performance and CO2 usage.
+
+Learn more about the Nextcloud Ethical AI Rating [in our blog](https://nextcloud.com/blog/nextcloud-ethical-ai-rating/).
 	]]></description>
-	<version>2.0.1</version>
-	<licence>MIT</licence>
+	<version>2.1.0</version>
+	<licence>agpl</licence>
 	<author mail="mklehr@gmx.net" homepage="https://github.com/marcelklehr">Marcel Klehr</author>
 	<author mail="bigcat88@icloud.com" homepage="https://github.com/bigcat88">Alexander Piskun</author>
 	<namespace>PyAppV2_stt_whisper2</namespace>
@@ -18,7 +32,7 @@
 	<repository type="git">https://github.com/nextcloud/stt_whisper2</repository>
 	<screenshot>https://raw.githubusercontent.com/nextcloud/stt_whisper2/main/screenshots/Logo.png</screenshot>
 	<dependencies>
-		<nextcloud min-version="30" max-version="30"/>
+		<nextcloud min-version="30" max-version="31"/>
 	</dependencies>
 	<external-app>
 		<docker-install>
