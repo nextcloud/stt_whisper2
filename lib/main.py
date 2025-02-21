@@ -57,6 +57,8 @@ async def lifespan(_app: FastAPI):
 
 def log(nc, level, content):
     logger.log((level+1)*10, content)
+    if level < LogLvl.WARNING:
+        return
     try:
         nc.log(level, content)
     except:

@@ -160,7 +160,7 @@ jobs:
             </d:prop>
             </d:propfind>' | grep -oP '(?<=<oc:id>)[^<]+' | grep -oE '^[0-9]+')
           FILE_ID=$((10#$NUMERIC_FILE_ID))
-          TASK=$(curl -X POST -u "$CREDS" -H "oCS-APIRequest: true" -H "Content-type: application/json" http://localhost:8080/ocs/v2.php/taskprocessing/schedule?format=json --data-raw "{\"input\": {\"input\": ${FILE_ID}}, \"type\":\"core:audio2text\", \"appId\": \"test\", \"customId\": \""}")
+          TASK=$(curl -X POST -u "$CREDS" -H "oCS-APIRequest: true" -H "Content-type: application/json" http://localhost:8080/ocs/v2.php/taskprocessing/schedule?format=json --data-raw "{\"input\": {\"input\": ${FILE_ID}}, \"type\":\"core:audio2text\", \"appId\": \"test\", \"customId\": \"\"}")
           echo $TASK
           TASK_ID=$(echo $TASK | jq '.ocs.data.task.id')
           NEXT_WAIT_TIME=0
