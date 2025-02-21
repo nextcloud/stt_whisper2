@@ -2,3 +2,4 @@ nc_py_api[app]>=0.8.0
 pydantic
 faster-whisper
 python-multipart
+ctranslate2==4.4.0
