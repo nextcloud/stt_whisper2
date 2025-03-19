@@ -89,51 +89,53 @@ class BackgroundProcessTask(threading.Thread):
 
         nc = NextcloudApp()
         while True:
-            while ENABLED_FLAG:
-                try:
-                    next = nc.providers.task_processing.next_task([f'stt_whisper2:{model_name}' for model_name, _ in models.items()], ['core:audio2text'])
-                    if not 'task' in next or next is None:
-                        sleep(5)
-                        continue
-                    task = next.get('task')
-                except Exception as e:
-                    LOGGER.error(str(e))
+            if not ENABLED_FLAG:
+                sleep(30)
+                ENABLED_FLAG = nc.enabled_state
+                continue
+
+            try:
+                next = nc.providers.task_processing.next_task([f'stt_whisper2:{model_name}' for model_name, _ in models.items()], ['core:audio2text'])
+                if not 'task' in next or next is None:
                     sleep(5)
                     continue
-                try:
-                    LOGGER.info(f"Next task: {task['id']}")
-                    model_name = next.get("provider").get('name').split(':', 2)[1]
-                    LOGGER.info( f"model: {model_name}")
-                    model_load = models.get(model_name)
-                    if model_load is None:
-                        NextcloudApp().providers.task_processing.report_result(
-                            task["id"], None, "Requested model is not available"
-                        )
-                        continue
-                    model = model_load()
-
-                    LOGGER.info("generating transcription")
-                    time_start = perf_counter()
-                    file_name = get_file(nc, task["id"], task.get("input").get('input'))
-                    segments, _ = model.transcribe(file_name)
-                    del model
-                    LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
-
-                    transcript = ''
-                    for segment in segments:
-                        transcript += segment.text
+                task = next.get('task')
+            except Exception as e:
+                LOGGER.error(str(e))
+                sleep(5)
+                continue
+            try:
+                LOGGER.info(f"Next task: {task['id']}")
+                model_name = next.get("provider").get('name').split(':', 2)[1]
+                LOGGER.info( f"model: {model_name}")
+                model_load = models.get(model_name)
+                if model_load is None:
                     NextcloudApp().providers.task_processing.report_result(
-                        task["id"],
-                        {'output': str(transcript)},
+                        task["id"], None, "Requested model is not available"
                     )
-                except Exception as e:  # noqa
-                    try:
-                        LOGGER.error(str(e))
-                        nc.providers.task_processing.report_result(task["id"], None, str(e))
-                    except:
-                        pass
-            sleep(30)
-            ENABLED_FLAG = nc.enabled_state
+                    continue
+                model = model_load()
+
+                LOGGER.info("generating transcription")
+                time_start = perf_counter()
+                file_name = get_file(nc, task["id"], task.get("input").get('input'))
+                segments, _ = model.transcribe(file_name)
+                del model
+                LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
+
+                transcript = ''
+                for segment in segments:
+                    transcript += segment.text
+                NextcloudApp().providers.task_processing.report_result(
+                    task["id"],
+                    {'output': str(transcript)},
+                )
+            except Exception as e:  # noqa
+                try:
+                    LOGGER.error(str(e))
+                    nc.providers.task_processing.report_result(task["id"], None, str(e))
+                except:
+                    pass
 
 
 async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
