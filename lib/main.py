@@ -3,24 +3,45 @@ from contextlib import asynccontextmanager
 from time import perf_counter, sleep
 import os
 import logging
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', handlers=[logging.StreamHandler()])
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+from pathlib import Path  # noqa
+import xml.etree.ElementTree as ET  # noqa
 
 from fastapi import FastAPI
 from faster_whisper import WhisperModel
 from nc_py_api import AsyncNextcloudApp, NextcloudApp
 from nc_py_api.ex_app import (
     get_computation_device,
-    LogLvl,
     persistent_storage,
     run_app,
     set_handlers,
+    setup_nextcloud_logging,
 )
 
 from nc_py_api.ex_app.providers.task_processing import TaskProcessingProvider
 from ocs import ocs
+
+# ---------Start of configuration values for manual deploy---------
+# Uncommenting the following lines may be useful when installing manually.
+
+# xml_path = Path(__file__).resolve().parent / "../appinfo/info.xml"
+# os.environ["APP_VERSION"] = ET.parse(xml_path).getroot().find(".//image-tag").text
+#
+# os.environ["NEXTCLOUD_URL"] = "http://nextcloud.local/index.php"
+# os.environ["APP_HOST"] = "0.0.0.0"
+# os.environ["APP_PORT"] = "9030"
+# os.environ["APP_ID"] = "stt_whisper2"
+# os.environ["APP_SECRET"] = "12345"  # noqa
+# ---------Enf of configuration values for manual deploy---------
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%H:%M:%S",
+)
+LOGGER = logging.getLogger(os.environ["APP_ID"])
+LOGGER.setLevel(logging.DEBUG)
+ENABLED_FLAG = NextcloudApp().enabled_state
+
 
 def load_models():
     models = {}
@@ -46,6 +67,7 @@ models = load_models()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    setup_nextcloud_logging("stt_whisper2", logging_level=logging.WARNING)
     set_handlers(
         APP,
         enabled_handler,
@@ -55,15 +77,6 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-def log(nc, level, content):
-    logger.log((level+1)*10, content)
-    if level < LogLvl.WARNING:
-        return
-    try:
-        nc.log(level, content)
-    except:
-        pass
-
 APP = FastAPI(lifespan=lifespan)
 
 def get_file(nc, task_id, file_id):
@@ -72,8 +85,15 @@ def get_file(nc, task_id, file_id):
 
 class BackgroundProcessTask(threading.Thread):
     def run(self, *args, **kwargs):  # pylint: disable=unused-argument
+        global ENABLED_FLAG
+
         nc = NextcloudApp()
         while True:
+            if not ENABLED_FLAG:
+                sleep(30)
+                ENABLED_FLAG = nc.enabled_state
+                continue
+
             try:
                 next = nc.providers.task_processing.next_task([f'stt_whisper2:{model_name}' for model_name, _ in models.items()], ['core:audio2text'])
                 if not 'task' in next or next is None:
@@ -81,14 +101,13 @@ class BackgroundProcessTask(threading.Thread):
                     continue
                 task = next.get('task')
             except Exception as e:
-                print(str(e))
-                log(nc, LogLvl.ERROR, str(e))
+                LOGGER.error(str(e))
                 sleep(5)
                 continue
             try:
-                log(nc, LogLvl.INFO, f"Next task: {task['id']}")
+                LOGGER.info(f"Next task: {task['id']}")
                 model_name = next.get("provider").get('name').split(':', 2)[1]
-                log(nc, LogLvl.INFO, f"model: {model_name}")
+                LOGGER.info( f"model: {model_name}")
                 model_load = models.get(model_name)
                 if model_load is None:
                     NextcloudApp().providers.task_processing.report_result(
@@ -97,12 +116,12 @@ class BackgroundProcessTask(threading.Thread):
                     continue
                 model = model_load()
 
-                log(nc, LogLvl.INFO, "generating transcription")
+                LOGGER.info("generating transcription")
                 time_start = perf_counter()
                 file_name = get_file(nc, task["id"], task.get("input").get('input'))
                 segments, _ = model.transcribe(file_name)
                 del model
-                log(nc, LogLvl.INFO, f"transcription generated: {perf_counter() - time_start}s")
+                LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
 
                 transcript = ''
                 for segment in segments:
@@ -112,17 +131,19 @@ class BackgroundProcessTask(threading.Thread):
                     {'output': str(transcript)},
                 )
             except Exception as e:  # noqa
-                print(str(e))
                 try:
-                    log(nc, LogLvl.ERROR, str(e))
+                    LOGGER.error(str(e))
                     nc.providers.task_processing.report_result(task["id"], None, str(e))
                 except:
                     pass
 
 
 async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
-    print(f"enabled={enabled}")
+    global ENABLED_FLAG
+
+    ENABLED_FLAG = enabled
     if enabled is True:
+        LOGGER.info("Hello from %s", nc.app_cfg.app_name)
         for model_name, _ in models.items():
             await nc.providers.task_processing.register(TaskProcessingProvider(
                 id=f'stt_whisper2:{model_name}',
@@ -131,6 +152,7 @@ async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
                 expected_runtime=120,
             ))
     else:
+        LOGGER.info("Bye bye from %s", nc.app_cfg.app_name)
         for model_name, _ in models.items():
             await nc.providers.task_processing.unregister(f'stt_whisper2:{model_name}', True)
     return ""
