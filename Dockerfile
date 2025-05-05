@@ -2,7 +2,7 @@ FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04
 
 RUN \
   apt update && \
-  apt install -y python3 python3-pip
+  apt install -y python3 python3-pip curl
 
 # Download and install FRP client into /usr/local/bin.
 RUN set -ex; \
