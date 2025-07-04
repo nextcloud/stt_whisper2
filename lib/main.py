@@ -82,10 +82,14 @@ APP = FastAPI(lifespan=lifespan)
 def get_file(nc, task_id, file_id):
     return ocs(nc._session, 'GET',f"/ocs/v2.php/taskprocessing/tasks_provider/{task_id}/file/{file_id}")
 
+LAST_MODEL_NAME = None
+LAST_MODEL = None
 
 class BackgroundProcessTask(threading.Thread):
     def run(self, *args, **kwargs):  # pylint: disable=unused-argument
         global ENABLED_FLAG
+        global LAST_MODEL_NAME
+        global LAST_MODEL
 
         nc = NextcloudApp()
         while True:
@@ -108,13 +112,18 @@ class BackgroundProcessTask(threading.Thread):
                 LOGGER.info(f"Next task: {task['id']}")
                 model_name = next.get("provider").get('name').split(':', 2)[1]
                 LOGGER.info( f"model: {model_name}")
-                model_load = models.get(model_name)
-                if model_load is None:
-                    NextcloudApp().providers.task_processing.report_result(
-                        task["id"], None, "Requested model is not available"
-                    )
-                    continue
-                model = model_load()
+                if LAST_MODEL_NAME == model_name:
+                    model = LAST_MODEL
+                else:
+                    model_load = models.get(model_name)
+                    if model_load is None:
+                        NextcloudApp().providers.task_processing.report_result(
+                            task["id"], None, "Requested model is not available"
+                        )
+                        continue
+                    model = model_load()
+                    LAST_MODEL_NAME = model_name
+                    LAST_MODEL = model
 
                 LOGGER.info("generating transcription")
                 time_start = perf_counter()
