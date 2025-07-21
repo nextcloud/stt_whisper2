@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.2.0] - 2025-07-21
+
+### New
+
+- Add support for HaRP deploy method
+- Do not offload model unless a different model is used in the next request
+
 ## [2.1.3] - 2025-03-21
 
 ### Fixed
