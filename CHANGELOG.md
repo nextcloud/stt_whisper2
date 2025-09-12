@@ -5,9 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [2.2.2] - 2025-07-22
+## [2.2.3] - 2025-10-12
 
-### New
+### Fixed
+
+- Pin nc_py_api dependency to v0.20.2 to prevent httpx error
+
+## [2.2.2] - 2025-10-12
+
+### Fixed
 
 - Add missing models back
 
