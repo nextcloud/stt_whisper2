@@ -1,5 +1,6 @@
 import threading
 from contextlib import asynccontextmanager
+from threading import Event
 from time import perf_counter, sleep
 import os
 import logging
@@ -63,6 +64,9 @@ def create_model_loader(file_path):
     return lambda: WhisperModel(file_path, device=device)
 
 
+TRIGGER = Event()
+WAIT_INTERVAL = 5
+WAIT_INTERVAL_WITH_TRIGGER = 5 * 60
 models = load_models()
 
 @asynccontextmanager
@@ -71,6 +75,7 @@ async def lifespan(_app: FastAPI):
     set_handlers(
         APP,
         enabled_handler,
+        trigger_handler=trigger_handler
     )
     t = BackgroundProcessTask()
     t.start()
@@ -101,12 +106,12 @@ class BackgroundProcessTask(threading.Thread):
             try:
                 next = nc.providers.task_processing.next_task([f'stt_whisper2:{model_name}' for model_name, _ in models.items()], ['core:audio2text'])
                 if not 'task' in next or next is None:
-                    sleep(5)
+                    wait_for_task()
                     continue
                 task = next.get('task')
             except Exception as e:
                 LOGGER.error(str(e))
-                sleep(5)
+                wait_for_task(10)
                 continue
             try:
                 LOGGER.info(f"Next task: {task['id']}")
@@ -166,6 +171,21 @@ async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
             await nc.providers.task_processing.unregister(f'stt_whisper2:{model_name}', True)
     return ""
 
+
+def trigger_handler():
+    global TRIGGER
+    TRIGGER.set()
+
+# Waits for `interval` seconds or WAIT_INTERVAL
+# In case a TRIGGER event comes in, WAIT_INTERVAL is set (increased) to WAIT_INTERVAL_WITH_TRIGGER
+def wait_for_task(interval = None):
+    global WAIT_INTERVAL
+    global WAIT_INTERVAL_WITH_TRIGGER
+    if interval is None:
+        interval = WAIT_INTERVAL
+    if TRIGGER.wait(timeout=interval):
+        WAIT_INTERVAL = WAIT_INTERVAL_WITH_TRIGGER
+    TRIGGER.clear()
 
 if __name__ == "__main__":
     run_app("main:APP", log_level="trace")
