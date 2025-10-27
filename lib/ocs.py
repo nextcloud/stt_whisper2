@@ -24,7 +24,7 @@ def check_error(response: Response, info: str = ""):
 		else:
 			phrase = "Unknown error"
 		raise NextcloudException(status_code, reason=phrase, info=info)
-	if not codes.is_error(status_code):
+	if status_code < 400:
 		return
 	raise NextcloudException(status_code, reason=codes(status_code).phrase, info=info)
 
@@ -43,7 +43,7 @@ def ocs(
 	info = f"request: {method} {path}"
 	nested_req = kwargs.pop("nested_req", False)
 	response: Response = ncSession.adapter.request(
-		method, path, content=content, json=json, params=params, files=files, **kwargs
+		method, path, data=content, json=json, params=params, files=files, **kwargs
 	)
 	if response.status_code >= 400:
 		print(loads(response.text))
