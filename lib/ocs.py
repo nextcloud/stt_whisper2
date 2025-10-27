@@ -2,7 +2,7 @@ import tempfile
 import typing
 from json import loads
 
-from httpx import Response, codes, ReadTimeout
+from niquests import Response, codes, RequestException
 from nc_py_api import NextcloudException
 
 
@@ -42,12 +42,9 @@ def ocs(
 	ncSession.init_adapter()
 	info = f"request: {method} {path}"
 	nested_req = kwargs.pop("nested_req", False)
-	try:
-		response: Response = ncSession.adapter.request(
-			method, path, content=content, json=json, params=params, files=files, **kwargs
-		)
-	except ReadTimeout:
-		raise NextcloudException(408, info=info) from None
+	response: Response = ncSession.adapter.request(
+		method, path, content=content, json=json, params=params, files=files, **kwargs
+	)
 	if response.status_code >= 400:
 		print(loads(response.text))
 	check_error(response, info)
