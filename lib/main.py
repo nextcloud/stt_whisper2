@@ -138,13 +138,15 @@ def background_thread_task():
             LOGGER.info("generating transcription")
             time_start = perf_counter()
             file_name = get_file(nc, task["id"], task.get("input").get('input'))
-            segments, _ = model.transcribe(file_name)
-            del model
-            LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
-
+            segments, info = model.transcribe(file_name)
             transcript = ''
             for segment in segments:
                 transcript += segment.text
+                percentage = ( segment.start / info.duration ) * 100
+                nc.providers.task_processing.set_progress(task['id'], percentage)
+            del model
+            LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
+
             nc.providers.task_processing.report_result(
                 task["id"],
                 {'output': str(transcript)},
