@@ -4,3 +4,4 @@ faster-whisper
 python-multipart
 ctranslate2==4.4.0
 niquests
+requests
