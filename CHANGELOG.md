@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.3.0] - 2025-11-12
+
+### New
+
+ - Support Nextcloud 33
+ - feat: Add support for taskprocessing trigger event to speed up task pickup
+ - Feat: Report task progress to frontend
+
 ## [2.2.3] - 2025-10-12
 
 ### Fixed
