@@ -109,18 +109,25 @@ def background_thread_task():
             sleep(5)
 
         try:
-            next = nc.providers.task_processing.next_task([f'stt_whisper2:{model_name}' for model_name, _ in models.items()], ['core:audio2text'])
-            if not 'task' in next or next is None:
+            item = nc.providers.task_processing.next_task([f'stt_whisper2:{model_name}' for model_name, _ in models.items()], ['core:audio2text'])
+            if not isinstance(item, dict):
                 wait_for_task()
                 continue
-            task = next.get('task')
+            task = item.get("task")
+            provider = item.get("provider")
+            if task is None or provider is None:
+                wait_for_task()
+                continue
         except Exception as e:
             LOGGER.error(str(e) + "\n" + "".join(traceback.format_exception(e)))
             wait_for_task(10)
             continue
         try:
             LOGGER.info(f"Next task: {task['id']}")
-            model_name = next.get("provider").get('name').split(':', 2)[1]
+            name = provider.get('name')
+            if not isinstance(name, str) or ':' not in name:
+                raise ValueError(f"Invalid provider name: {name!r}")
+            model_name = name.split(':', 2)[1]
             LOGGER.info( f"model: {model_name}")
             if LAST_MODEL_NAME == model_name:
                 model = LAST_MODEL
