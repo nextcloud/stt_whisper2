@@ -114,16 +114,18 @@ def background_thread_task():
                 wait_for_task()
                 continue
             task = item.get("task")
-            provider = item.get("provider")
-            if task is None or provider is None:
+            if task is None:
                 wait_for_task()
                 continue
-        except Exception as e:
+        except e:
             LOGGER.error(str(e) + "\n" + "".join(traceback.format_exception(e)))
             wait_for_task(10)
             continue
         try:
             LOGGER.info(f"Next task: {task['id']}")
+            provider = item.get("provider")
+            if provider is None:
+                raise ValueError('Next task endpoint did not provide a provider name')
             name = provider.get('name')
             if not isinstance(name, str) or ':' not in name:
                 raise ValueError(f"Invalid provider name: {name!r}")
