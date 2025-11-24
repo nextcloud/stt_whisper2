@@ -20,7 +20,7 @@ from nc_py_api.ex_app import (
 )
 
 from nc_py_api.ex_app.providers.task_processing import TaskProcessingProvider
-from ocs import ocs
+from ocs import get_file
 
 # ---------Start of configuration values for manual deploy---------
 # Uncommenting the following lines may be useful when installing manually.
@@ -88,9 +88,6 @@ async def lifespan(_app: FastAPI):
 
 APP = FastAPI(lifespan=lifespan)
 
-def get_file(nc, task_id, file_id):
-    return ocs(nc._session, 'GET',f"/ocs/v2.php/taskprocessing/tasks_provider/{task_id}/file/{file_id}")
-
 LAST_MODEL_NAME = None
 LAST_MODEL = None
 
@@ -117,7 +114,7 @@ def background_thread_task():
             if task is None:
                 wait_for_task()
                 continue
-        except e:
+        except Exception as e:
             LOGGER.error(str(e) + "\n" + "".join(traceback.format_exception(e)))
             wait_for_task(10)
             continue
@@ -166,6 +163,9 @@ def background_thread_task():
                 nc.providers.task_processing.report_result(task["id"], None, str(e))
             except:
                 pass
+        finally:
+            if file_name and os.path.exists(file_name):
+                os.remove(file_name)
 
 
 async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:

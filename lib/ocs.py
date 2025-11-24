@@ -52,5 +52,10 @@ def ocs(
 		return []
 	# Create a temporary file
 	with tempfile.NamedTemporaryFile(delete=False, mode='wb') as temp_file:
-		temp_file.write(response.content)  # Write the response content to the temp file
+		for chunk in response.iter_content(chunk_size=8192):  # Read in chunks of 8KB
+			if chunk:  # Filter out keep-alive chunks
+				temp_file.write(chunk)
 		return temp_file.name  # Get the temp file's path
+
+def get_file(nc, task_id, file_id):
+    return ocs(nc._session, 'GET',f"/ocs/v2.php/taskprocessing/tasks_provider/{task_id}/file/{file_id}", stream=True)
