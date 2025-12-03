@@ -21,7 +21,7 @@ Negative:
 
 Learn more about the Nextcloud Ethical AI Rating [in our blog](https://nextcloud.com/blog/nextcloud-ethical-ai-rating/).
 	]]></description>
-	<version>2.3.0</version>
+	<version>2.4.0</version>
 	<licence>agpl</licence>
 	<author mail="mklehr@gmx.net" homepage="https://github.com/marcelklehr">Marcel Klehr</author>
 	<author mail="bigcat88@icloud.com" homepage="https://github.com/bigcat88">Alexander Piskun</author>
@@ -39,7 +39,7 @@ Learn more about the Nextcloud Ethical AI Rating [in our blog](https://nextcloud
 		<docker-install>
 			<registry>ghcr.io</registry>
 			<image>nextcloud/stt_whisper2</image>
-			<image-tag>2.3.0</image-tag>
+			<image-tag>2.4.0</image-tag>
 		</docker-install>
 	</external-app>
 </info>

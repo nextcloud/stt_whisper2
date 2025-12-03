@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.4.0] - 2025-12-03
+
+### New
+
+- Ships with Whisper large-v3-turbo model (similar quality as large-v3, but 5-8 times faster)
+
+### Fixed
+
+* fix: Stream audio file to disk
+* fix: Make main loop more defensive
+
 ## [2.3.0] - 2025-11-12
 
 ### New
