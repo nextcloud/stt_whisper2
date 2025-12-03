@@ -164,7 +164,7 @@ def background_thread_task():
             except:
                 pass
         finally:
-            if file_name and os.path.exists(file_name):
+            if 'file_name' in locals() and os.path.exists(file_name):
                 os.remove(file_name)
 
 
