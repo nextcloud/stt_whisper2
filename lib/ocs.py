@@ -43,7 +43,7 @@ def ocs(
 	info = f"request: {method} {path}"
 	nested_req = kwargs.pop("nested_req", False)
 	response: Response = ncSession.adapter.request(
-		method, path, data=content, json=json, params=params, files=files, **kwargs
+		method, path, data=content, json=json, params=params, files=files, stream=True, **kwargs
 	)
 	if response.status_code >= 400:
 		print(loads(response.text))
@@ -51,11 +51,11 @@ def ocs(
 	if response.status_code == 204:  # NO_CONTENT
 		return []
 	# Create a temporary file
-	with tempfile.NamedTemporaryFile(delete=False, mode='wb') as temp_file:
+	with tempfile.NamedTemporaryFile(delete=False, delete_on_close=False, mode='wb') as temp_file:
 		for chunk in response.iter_content(chunk_size=8192):  # Read in chunks of 8KB
 			if chunk:  # Filter out keep-alive chunks
 				temp_file.write(chunk)
 		return temp_file.name  # Get the temp file's path
 
 def get_file(nc, task_id, file_id):
-    return ocs(nc._session, 'GET',f"/ocs/v2.php/taskprocessing/tasks_provider/{task_id}/file/{file_id}", stream=True)
+    return ocs(nc._session, 'GET',f"/ocs/v2.php/taskprocessing/tasks_provider/{task_id}/file/{file_id}")
