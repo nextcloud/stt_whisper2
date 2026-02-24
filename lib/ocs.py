@@ -55,7 +55,9 @@ def ocs(
 		for chunk in response.iter_content(chunk_size=8192):  # Read in chunks of 8KB
 			if chunk:  # Filter out keep-alive chunks
 				temp_file.write(chunk)
-		return temp_file.name  # Get the temp file's path
+		temp_file.flush()  # Ensure all data is written to disk
+		temp_file_path = temp_file.name  # Get the temp file's path
+	return temp_file_path  # Return after file is closed
 
 def get_file(nc, task_id, file_id):
     return ocs(nc._session, 'GET',f"/ocs/v2.php/taskprocessing/tasks_provider/{task_id}/file/{file_id}", stream=True)
