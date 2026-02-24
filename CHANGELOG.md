@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.4.1] - 2026-02-24
+
+### Fixed
+
+- fix(get_file): Do not delete temp file after writing and close file before returning path
+
 ## [2.4.0] - 2025-12-03
 
 ### New
