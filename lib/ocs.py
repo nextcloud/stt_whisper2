@@ -51,7 +51,7 @@ def ocs(
 	if response.status_code == 204:  # NO_CONTENT
 		return []
 	# Create a temporary file
-	with tempfile.NamedTemporaryFile(delete=False, delete_on_close=False, mode='wb') as temp_file:
+	with tempfile.NamedTemporaryFile(delete=False, mode='wb') as temp_file:
 		for chunk in response.iter_content(chunk_size=8192):  # Read in chunks of 8KB
 			if chunk:  # Filter out keep-alive chunks
 				temp_file.write(chunk)
