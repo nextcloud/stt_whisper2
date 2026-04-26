@@ -43,6 +43,17 @@ logging.basicConfig(
 LOGGER = logging.getLogger(os.environ["APP_ID"])
 LOGGER.setLevel(logging.DEBUG)
 
+# --- VAD configuration (Silero, bundled with faster-whisper) ---
+# Enabled by default; disable by setting STT_WHISPER2_VAD_FILTER=0 in the container env.
+# Tunables map 1:1 onto faster_whisper.vad.VadOptions.
+VAD_FILTER = os.environ.get("STT_WHISPER2_VAD_FILTER", "1") == "1"
+VAD_PARAMETERS = {
+    "threshold": float(os.environ.get("STT_WHISPER2_VAD_THRESHOLD", "0.5")),
+    "min_speech_duration_ms": int(os.environ.get("STT_WHISPER2_VAD_MIN_SPEECH_MS", "0")),
+    "min_silence_duration_ms": int(os.environ.get("STT_WHISPER2_VAD_MIN_SILENCE_MS", "2000")),
+    "speech_pad_ms": int(os.environ.get("STT_WHISPER2_VAD_SPEECH_PAD_MS", "400")),
+}
+
 
 def load_models():
     models = {}
@@ -144,7 +155,11 @@ def background_thread_task():
             LOGGER.info("generating transcription")
             time_start = perf_counter()
             file_name = get_file(nc, task["id"], task.get("input").get('input'))
-            segments, info = model.transcribe(file_name)
+            segments, info = model.transcribe(
+                file_name,
+                vad_filter=VAD_FILTER,
+                vad_parameters=VAD_PARAMETERS if VAD_FILTER else None,
+            )
             transcript = ''
             for segment in segments:
                 transcript += segment.text
