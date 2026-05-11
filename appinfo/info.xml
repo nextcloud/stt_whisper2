@@ -41,5 +41,32 @@ Learn more about the Nextcloud Ethical AI Rating [in our blog](https://nextcloud
 			<image>nextcloud/stt_whisper2</image>
 			<image-tag>2.4.2</image-tag>
 		</docker-install>
+		<environment-variables>
+			<variable>
+				<name>STT_WHISPER2_VAD_FILTER</name>
+				<display-name>Enable Voice Activity Detection filter</display-name>
+				<description>Set to 1 to only transcribe audio parts that pass the voice activity filter. This helps reduce hallucinations on long audio files. Default: 1</description>
+			</variable>
+			<variable>
+				<name>STT_WHISPER2_VAD_THRESHOLD</name>
+				<display-name>Voice Activity Detection filter threshold</display-name>
+				<description>The threshold for the VAD filter. Must be a float between 0 and 1. Default: 0.5</description>
+			</variable>
+			<variable>
+				<name>STT_WHISPER2_VAD_MIN_SPEECH_MS</name>
+				<display-name>Voice Activity Detection filter minimum speech milliseconds</display-name>
+				<description>The minimum time of speech that activates the VAD filter, as an integer. Default: 0</description>
+			</variable>
+			<variable>
+				<name>STT_WHISPER2_VAD_MIN_SILENCE_MS</name>
+				<display-name>Voice Activity Detection filter minimum silence milliseconds</display-name>
+				<description>The minimum time of silence that deactivates the VAD filter, as an integer. Default: 2000</description>
+			</variable>
+			<variable>
+				<name>STT_WHISPER2_VAD_SPEECH_PAD_MS</name>
+				<display-name>Voice Activity Detection filter speech pad milliseconds</display-name>
+				<description>The time that speech chunks will be paded with silence by the VAD filter, as an integer. Default: 400</description>
+			</variable>
+		</environment-variables>
 	</external-app>
 </info>
