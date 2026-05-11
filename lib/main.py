@@ -108,7 +108,7 @@ def schedule_reformulation_and_wait(nc: NextcloudApp, transcript: str) -> str:
             headers={"OCS-APIRequest": "true"},
             json={
                 "input": {"input": transcript},
-                "type": "core:text2text:reformulation",
+                "type": "core:text2text:reformatparagraphs",
                 "appId": os.environ["APP_ID"],
             },
         )
