@@ -240,6 +240,7 @@ def background_thread_task():
                 LAST_MODEL_NAME = model_name
                 LAST_MODEL = model
 
+            enhanced = variant == ENHANCED_SUFFIX
             LOGGER.info("generating transcription")
             time_start = perf_counter()
             file_name = get_file(nc, task["id"], task.get("input").get('input'))
@@ -248,11 +249,13 @@ def background_thread_task():
             for segment in segments:
                 transcript += segment.text
                 percentage = ( segment.start / info.duration ) * 100
+                if enhanced:
+                    percentage /= 2
                 nc.providers.task_processing.set_progress(task['id'], percentage)
             del model
             LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
 
-            if variant == ENHANCED_SUFFIX:
+            if enhanced:
                 nc.providers.task_processing.set_progress(task["id"], 50)
                 try:
                     LOGGER.info("Creating enhanced version of transcript")
