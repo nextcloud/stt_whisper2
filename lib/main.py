@@ -73,27 +73,30 @@ WAIT_INTERVAL = 5
 WAIT_INTERVAL_WITH_TRIGGER = 5 * 60
 models = load_models()
 
-ENHANCED_SUFFIX = "enhanced"
 
 
-def provider_id_for(model_name: str, variant: str | None = None) -> str:
-    if variant:
-        return f"stt_whisper2:{model_name}:{variant}"
+def provider_id_for(model_name: str, enhanced: bool = False) -> str:
+    if enhanced:
+        return f"stt_whisper2_enhanced:{model_name}"
     return f"stt_whisper2:{model_name}"
 
 
-def parse_provider(provider: dict) -> tuple[str, str]:
+def parse_provider(provider: dict) -> tuple[str, bool]:
     provider_id = provider.get("id")
     if not isinstance(provider_id, str) or ":" not in provider_id:
         provider_id = provider.get("name")
 
+    if isinstance(provider_id, str) and provider_id.startswith(
+        "stt_whisper2_enhanced:"
+    ):
+        model_name = provider_id.split(":", 1)[1]
+        if model_name:
+            return model_name, True
+
     if isinstance(provider_id, str) and provider_id.startswith("stt_whisper2:"):
-        parts = provider_id.split(":")
-        if len(parts) >= 2 and parts[1]:
-            model_name = parts[1]
-            if len(parts) >= 3 and parts[2] == ENHANCED_SUFFIX:
-                return model_name, ENHANCED_SUFFIX
-            return model_name, "normal"
+        model_name = provider_id.split(":", 1)[1]
+        if model_name:
+            return model_name, False
 
     raise ValueError(f"Invalid provider: {provider!r}")
 
@@ -204,7 +207,7 @@ def background_thread_task():
         provider_ids = []
         for model_name, _ in models.items():
             provider_ids.append(provider_id_for(model_name))
-            provider_ids.append(provider_id_for(model_name, ENHANCED_SUFFIX))
+            provider_ids.append(provider_id_for(model_name, enhanced=True))
 
         try:
             item = nc.providers.task_processing.next_task(provider_ids, ["core:audio2text"])
@@ -221,12 +224,11 @@ def background_thread_task():
             continue
         try:
             LOGGER.info(f"Next task: {task['id']}")
-            nc.set_user(task["userId"])
             provider = item.get("provider")
             if provider is None:
                 raise ValueError('Next task endpoint did not provide a provider name')
-            model_name, variant = parse_provider(provider)
-            LOGGER.info(f"model: {model_name} variant: {variant}")
+            model_name, enhanced = parse_provider(provider)
+            LOGGER.info(f"model: {model_name} enhanced: {enhanced}")
             if LAST_MODEL_NAME == model_name:
                 model = LAST_MODEL
             else:
@@ -240,7 +242,6 @@ def background_thread_task():
                 LAST_MODEL_NAME = model_name
                 LAST_MODEL = model
 
-            enhanced = variant == ENHANCED_SUFFIX
             LOGGER.info("generating transcription")
             time_start = perf_counter()
             file_name = get_file(nc, task["id"], task.get("input").get('input'))
@@ -256,13 +257,17 @@ def background_thread_task():
             LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
 
             if enhanced:
-                nc.providers.task_processing.set_progress(task["id"], 50)
-                try:
-                    LOGGER.info("Creating enhanced version of transcript")
-                    transcript = schedule_reformulation_and_wait(nc, transcript)
-                    LOGGER.info("Enhanced version of transcript created")
-                except Exception as e:
-                    LOGGER.error(f"Enhanced transcription failed with error: {str(e)}\n{''.join(traceback.format_exception(e))}. Using raw transcript instead.")
+                if task.get("userId") is None:
+                    LOGGER.warning("User ID is not set for the task skipping enhanced transcription")
+                else:
+                    nc.set_user(task["userId"])
+                    nc.providers.task_processing.set_progress(task["id"], 50)
+                    try:
+                        LOGGER.info("Creating enhanced version of transcript")
+                        transcript = schedule_reformulation_and_wait(nc, transcript)
+                        LOGGER.info("Enhanced version of transcript created")
+                    except Exception as e:
+                        LOGGER.error(f"Enhanced transcription failed with error: {str(e)}\n{''.join(traceback.format_exception(e))}. Using raw transcript instead.")
                
 
             nc.providers.task_processing.report_result(
@@ -298,7 +303,7 @@ async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
             ))
             if supports_enhanced:
                 await nc.providers.task_processing.register(TaskProcessingProvider(
-                    id=provider_id_for(model_name, ENHANCED_SUFFIX),
+                    id=provider_id_for(model_name, enhanced=True),
                     name='Nextcloud Local Speech-To-Text Whisper: '+model_name+' (enhanced)',
                     task_type='core:audio2text',
                     expected_runtime=240,
@@ -310,7 +315,7 @@ async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
             await nc.providers.task_processing.unregister(provider_id_for(model_name), True)
             if supports_enhanced:
                 await nc.providers.task_processing.unregister(
-                    provider_id_for(model_name, ENHANCED_SUFFIX),
+                    provider_id_for(model_name, enhanced=True),
                     True,
                 )
     return ""
