@@ -8,6 +8,7 @@ import logging
 from pathlib import Path  # noqa
 import xml.etree.ElementTree as ET  # noqa
 
+import niquests
 from fastapi import FastAPI
 from faster_whisper import WhisperModel
 from nc_py_api import AsyncNextcloudApp, NextcloudApp
@@ -128,6 +129,13 @@ def background_thread_task():
             if task is None:
                 wait_for_task()
                 continue
+        except (
+                niquests.exceptions.ConnectionError,
+                niquests.exceptions.Timeout,
+        ) as e:
+            LOGGER.info('Temporary error fetching next tasks, will retry:', exc_info=e)
+            wait_for_task(5)
+            continue
         except Exception as e:
             LOGGER.error(str(e) + "\n" + "".join(traceback.format_exception(e)))
             wait_for_task(10)
