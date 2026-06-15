@@ -12,6 +12,9 @@ import niquests
 from fastapi import FastAPI
 from faster_whisper import WhisperModel
 from nc_py_api import AsyncNextcloudApp, NextcloudApp
+from nc_py_api import NextcloudException
+import niquests
+from niquests import RequestException
 from nc_py_api.ex_app import (
     get_computation_device,
     persistent_storage,
@@ -85,6 +88,102 @@ WAIT_INTERVAL = 5
 WAIT_INTERVAL_WITH_TRIGGER = 5 * 60
 models = load_models()
 
+
+
+def provider_id_for(model_name: str, enhanced: bool = False) -> str:
+    if enhanced:
+        return f"stt_whisper2_enhanced:{model_name}"
+    return f"stt_whisper2:{model_name}"
+
+
+def parse_provider(provider: dict) -> tuple[str, bool]:
+    provider_id = provider.get("id")
+    if not isinstance(provider_id, str) or ":" not in provider_id:
+        provider_id = provider.get("name")
+
+    if isinstance(provider_id, str) and provider_id.startswith(
+        "stt_whisper2_enhanced:"
+    ):
+        model_name = provider_id.split(":", 1)[1]
+        if model_name:
+            return model_name, True
+
+    if isinstance(provider_id, str) and provider_id.startswith("stt_whisper2:"):
+        model_name = provider_id.split(":", 1)[1]
+        if model_name:
+            return model_name, False
+
+    raise ValueError(f"Invalid provider: {provider!r}")
+
+
+def schedule_reformulation_and_wait(nc: NextcloudApp, transcript: str) -> str:
+    if transcript.strip() == "":
+        return transcript
+    try:
+        data = nc.ocs(
+            "POST",
+            "/ocs/v1.php/taskprocessing/schedule?format=json",
+            headers={"OCS-APIRequest": "true"},
+            json={
+                "input": {"input": transcript},
+                "type": "core:text2text:reformatparagraphs",
+                "appId": os.environ["APP_ID"],
+            },
+        )
+    except RequestException as e:
+        raise RuntimeError(f"Failed to schedule reformulation task: {e}") from e
+
+    task_id = data.get("task", {}).get("id")
+
+    if not isinstance(task_id, int):
+        raise RuntimeError(f"Unexpected schedule response: {data!r}")
+
+    task = {"id": task_id, "status": "STATUS_SCHEDULED", "output": None}
+    i = 0
+    while (
+        task.get("status") != "STATUS_SUCCESSFUL"
+        and task.get("status") != "STATUS_FAILED"
+        and i < 60 * 6
+    ):
+        if i < 60 * 3:
+            sleep(5)
+            i += 1
+        else:
+            # poll every 10 secs in the second half
+            sleep(10)
+            i += 2
+
+        try:
+            response = nc.ocs("GET", f"/ocs/v1.php/taskprocessing/task/{task_id}")
+        except (
+            niquests.exceptions.ConnectionError,
+            niquests.exceptions.Timeout,
+        ) as e:
+            LOGGER.warning("Ignored error during task polling", exc_info=e)
+            sleep(5)
+            i += 1
+            continue
+        except NextcloudException as e:
+            if e.status_code == niquests.codes.too_many_requests:  # pyright: ignore[reportAttributeAccessIssue]
+                LOGGER.warning("Rate limited during task polling, waiting 10s before retrying")
+                sleep(10)
+                i += 2
+                continue
+            raise RuntimeError("Failed to poll Nextcloud TaskProcessing task") from e
+
+        task = (response or {}).get("task", task)
+        LOGGER.debug(f"Task poll ({i * 5}s) response: {task}")
+
+    if task.get("status") == "STATUS_SUCCESSFUL":
+        output = (task.get("output") or {}).get("output")
+        if isinstance(output, str) and output.strip():
+            return output
+        raise RuntimeError(f"Reformulation returned empty output: {task!r}")
+    if task.get("status") == "STATUS_FAILED":
+        raise RuntimeError(f"Reformulation failed: {task!r}")
+    raise RuntimeError("Reformulation timed out")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global ENABLED
@@ -120,8 +219,13 @@ def background_thread_task():
         while not ENABLED.is_set():
             sleep(5)
 
+        provider_ids = []
+        for model_name, _ in models.items():
+            provider_ids.append(provider_id_for(model_name))
+            provider_ids.append(provider_id_for(model_name, enhanced=True))
+
         try:
-            item = nc.providers.task_processing.next_task([f'stt_whisper2:{model_name}' for model_name, _ in models.items()], ['core:audio2text'])
+            item = nc.providers.task_processing.next_task(provider_ids, ["core:audio2text"])
             if not isinstance(item, dict):
                 wait_for_task()
                 continue
@@ -145,11 +249,8 @@ def background_thread_task():
             provider = item.get("provider")
             if provider is None:
                 raise ValueError('Next task endpoint did not provide a provider name')
-            name = provider.get('name')
-            if not isinstance(name, str) or ':' not in name:
-                raise ValueError(f"Invalid provider name: {name!r}")
-            model_name = name.split(':', 2)[1]
-            LOGGER.info( f"model: {model_name}")
+            model_name, enhanced = parse_provider(provider)
+            LOGGER.info(f"model: {model_name} enhanced: {enhanced}")
             if LAST_MODEL_NAME == model_name:
                 model = LAST_MODEL
             else:
@@ -175,9 +276,25 @@ def background_thread_task():
             for segment in segments:
                 transcript += segment.text
                 percentage = ( segment.start / info.duration ) * 100
+                if enhanced:
+                    percentage /= 2
                 nc.providers.task_processing.set_progress(task['id'], percentage)
             del model
             LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
+
+            if enhanced:
+                if task.get("userId") is None:
+                    LOGGER.warning("User ID is not set for the task skipping enhanced transcription")
+                else:
+                    nc.set_user(task["userId"])
+                    nc.providers.task_processing.set_progress(task["id"], 50)
+                    try:
+                        LOGGER.info("Creating enhanced version of transcript")
+                        transcript = schedule_reformulation_and_wait(nc, transcript)
+                        LOGGER.info("Enhanced version of transcript created")
+                    except Exception as e:
+                        LOGGER.error(f"Enhanced transcription failed with error: {str(e)}\n{''.join(traceback.format_exception(e))}. Using raw transcript instead.")
+               
 
             nc.providers.task_processing.report_result(
                 task["id"],
@@ -197,21 +314,36 @@ def background_thread_task():
 async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
     global ENABLED
 
+    major = (await nc.srv_version).get("major")
+    supports_enhanced = major >= 34
+
     if enabled is True:
         ENABLED.set()
         LOGGER.info("Hello from %s", nc.app_cfg.app_name)
         for model_name, _ in models.items():
             await nc.providers.task_processing.register(TaskProcessingProvider(
-                id=f'stt_whisper2:{model_name}',
+                id=provider_id_for(model_name),
                 name='Nextcloud Local Speech-To-Text Whisper: '+model_name,
                 task_type='core:audio2text',
                 expected_runtime=120,
             ))
+            if supports_enhanced:
+                await nc.providers.task_processing.register(TaskProcessingProvider(
+                    id=provider_id_for(model_name, enhanced=True),
+                    name='Nextcloud Local Speech-To-Text Whisper: '+model_name+' (enhanced)',
+                    task_type='core:audio2text',
+                    expected_runtime=240,
+                ))
     else:
         ENABLED.clear()
         LOGGER.info("Bye bye from %s", nc.app_cfg.app_name)
         for model_name, _ in models.items():
-            await nc.providers.task_processing.unregister(f'stt_whisper2:{model_name}', True)
+            await nc.providers.task_processing.unregister(provider_id_for(model_name), True)
+            if supports_enhanced:
+                await nc.providers.task_processing.unregister(
+                    provider_id_for(model_name, enhanced=True),
+                    True,
+                )
     return ""
 
 
