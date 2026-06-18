@@ -3,7 +3,10 @@ import traceback
 from contextlib import asynccontextmanager
 from threading import Event
 from time import perf_counter, sleep
+from io import StringIO
 import os
+from time import gmtime, strftime
+from math import floor, modf
 import logging
 from pathlib import Path  # noqa
 import xml.etree.ElementTree as ET  # noqa
@@ -23,7 +26,12 @@ from nc_py_api.ex_app import (
     setup_nextcloud_logging,
 )
 
-from nc_py_api.ex_app.providers.task_processing import TaskProcessingProvider
+from nc_py_api.ex_app.providers.task_processing import (
+    ShapeDescriptor,
+    ShapeEnumValue,
+    ShapeType,
+    TaskProcessingProvider,
+)
 from ocs import get_file
 
 # ---------Start of configuration values for manual deploy---------
@@ -90,13 +98,15 @@ models = load_models()
 
 
 
-def provider_id_for(model_name: str, enhanced: bool = False) -> str:
+def provider_id_for(model_name: str, enhanced: bool = False, subtitles: bool = False) -> str:
+    if subtitles:
+        return f"stt_whisper2_subtitles:{model_name}"
     if enhanced:
         return f"stt_whisper2_enhanced:{model_name}"
     return f"stt_whisper2:{model_name}"
 
 
-def parse_provider(provider: dict) -> tuple[str, bool]:
+def parse_provider(provider: dict) -> tuple[str, bool, bool]:
     provider_id = provider.get("id")
     if not isinstance(provider_id, str) or ":" not in provider_id:
         provider_id = provider.get("name")
@@ -106,12 +116,19 @@ def parse_provider(provider: dict) -> tuple[str, bool]:
     ):
         model_name = provider_id.split(":", 1)[1]
         if model_name:
-            return model_name, True
+            return model_name, True, False
+
+    if isinstance(provider_id, str) and provider_id.startswith(
+        "stt_whisper2_subtitles:"
+    ):
+        model_name = provider_id.split(":", 1)[1]
+        if model_name:
+            return model_name, False, True
 
     if isinstance(provider_id, str) and provider_id.startswith("stt_whisper2:"):
         model_name = provider_id.split(":", 1)[1]
         if model_name:
-            return model_name, False
+            return model_name, False, False
 
     raise ValueError(f"Invalid provider: {provider!r}")
 
@@ -209,6 +226,51 @@ def start_bg_task():
     t = threading.Thread(target=background_thread_task)
     t.start()
 
+def build_transcript_text(segments, info, task_id, nc, enhanced) -> str:
+    transcript = ''
+    for segment in segments:
+        transcript += segment.text
+        percentage = ( segment.start / info.duration ) * 100
+        if enhanced:
+            percentage /= 2
+        nc.providers.task_processing.set_progress(task_id, percentage)
+
+    return transcript
+
+def build_transcript_srt(segments, info, task_id, nc) -> str:
+    transcript = ''
+    i = 0
+    for segment in segments:
+        i += 1
+        start_frac, start_int = modf(segment.start)
+        start_ms = floor(start_frac * 1000.0)
+        start = strftime('%H:%M:%S', gmtime(start_int))
+        end_frac, end_int = modf(segment.end)
+        end_ms = floor(end_frac * 1000.0)
+        end = strftime('%H:%M:%S', gmtime(end_int))
+
+        transcript += f'{i}\n{start},{start_ms:03d} --> {end},{end_ms:03d}\n{segment.text}\n\n'
+        percentage = ( segment.start / info.duration ) * 100
+        nc.providers.task_processing.set_progress(task_id, percentage)
+
+    return transcript
+
+def build_transcript_vtt(segments, info, task_id, nc) -> str:
+    transcript = 'WEBVTT\n\n'
+    for segment in segments:
+        start_frac, start_int = modf(segment.start)
+        start_ms = floor(start_frac * 1000.0)
+        start = strftime('%H:%M:%S', gmtime(start_int))
+        end_frac, end_int = modf(segment.end)
+        end_ms = floor(end_frac * 1000.0)
+        end = strftime('%H:%M:%S', gmtime(end_int))
+
+        transcript += f'{start}.{start_ms:03d} --> {end}.{end_ms:03d}\n{segment.text}\n\n'
+        percentage = ( segment.start / info.duration ) * 100
+        nc.providers.task_processing.set_progress(task_id, percentage)
+
+    return transcript
+
 def background_thread_task():
     global ENABLED
     global LAST_MODEL_NAME
@@ -223,9 +285,10 @@ def background_thread_task():
         for model_name, _ in models.items():
             provider_ids.append(provider_id_for(model_name))
             provider_ids.append(provider_id_for(model_name, enhanced=True))
+            provider_ids.append(provider_id_for(model_name, subtitles=True))
 
         try:
-            item = nc.providers.task_processing.next_task(provider_ids, ["core:audio2text"])
+            item = nc.providers.task_processing.next_task(provider_ids, ["core:audio2text", "core:audio2text:subtitles"])
             if not isinstance(item, dict):
                 wait_for_task()
                 continue
@@ -249,7 +312,7 @@ def background_thread_task():
             provider = item.get("provider")
             if provider is None:
                 raise ValueError('Next task endpoint did not provide a provider name')
-            model_name, enhanced = parse_provider(provider)
+            model_name, enhanced, subtitles = parse_provider(provider)
             LOGGER.info(f"model: {model_name} enhanced: {enhanced}")
             if LAST_MODEL_NAME == model_name:
                 model = LAST_MODEL
@@ -272,13 +335,14 @@ def background_thread_task():
                 vad_filter=VAD_FILTER,
                 vad_parameters=VAD_PARAMETERS if VAD_FILTER else None,
             )
-            transcript = ''
-            for segment in segments:
-                transcript += segment.text
-                percentage = ( segment.start / info.duration ) * 100
-                if enhanced:
-                    percentage /= 2
-                nc.providers.task_processing.set_progress(task['id'], percentage)
+
+            if subtitles:
+                if task['input']['format'] == 'vtt':
+                    transcript = build_transcript_vtt(segments, info, task['id'], nc)
+                else:
+                    transcript = build_transcript_srt(segments, info, task['id'], nc)
+            else:
+                transcript = build_transcript_text(segments, info, task['id'], nc, enhanced)
             del model
             LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
 
@@ -294,12 +358,21 @@ def background_thread_task():
                         LOGGER.info("Enhanced version of transcript created")
                     except Exception as e:
                         LOGGER.error(f"Enhanced transcription failed with error: {str(e)}\n{''.join(traceback.format_exception(e))}. Using raw transcript instead.")
-               
 
-            nc.providers.task_processing.report_result(
-                task["id"],
-                {'output': str(transcript)},
-            )
+            if subtitles:
+                file_id = nc.providers.task_processing.upload_result_file(
+                    task["id"],
+                    StringIO(transcript),
+                )
+                nc.providers.task_processing.report_result(
+                    task["id"],
+                    {'output': file_id},
+                )
+            else:
+                nc.providers.task_processing.report_result(
+                    task["id"],
+                    {'output': str(transcript)},
+                )
         except Exception as e:  # noqa
             try:
                 LOGGER.error(str(e) + "\n" + "".join(traceback.format_exception(e)))
@@ -316,6 +389,7 @@ async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
 
     major = (await nc.srv_version).get("major")
     supports_enhanced = major >= 34
+    supports_subtitles = major >= 35
 
     if enabled is True:
         ENABLED.set()
@@ -327,12 +401,40 @@ async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
                 task_type='core:audio2text',
                 expected_runtime=120,
             ))
+
             if supports_enhanced:
                 await nc.providers.task_processing.register(TaskProcessingProvider(
                     id=provider_id_for(model_name, enhanced=True),
                     name='Nextcloud Local Speech-To-Text Whisper: '+model_name+' (enhanced)',
                     task_type='core:audio2text',
                     expected_runtime=240,
+                ))
+
+            if supports_subtitles:
+                optional_input_shape = [
+                    ShapeDescriptor(
+                        name='format',
+                        description='The format of the subtitles file',
+                        shape_type=ShapeType.ENUM,
+                    ),
+                ]
+                optional_input_values = {
+                    'format': [
+                        ShapeEnumValue(name='SubRip Text', value='srt'),
+                        ShapeEnumValue(name='WebVTT', value='vtt'),
+                    ],
+                }
+                optional_input_defaults = {
+                    'format': 'srt',
+                }
+                await nc.providers.task_processing.register(TaskProcessingProvider(
+                    id=provider_id_for(model_name, subtitles=True),
+                    name='Nextcloud Local Speech-To-Text Whisper: '+model_name,
+                    task_type='core:audio2text:subtitles',
+                    expected_runtime=120,
+                    optional_input_shape=optional_input_shape,
+                    optional_input_shape_enum_values=optional_input_values,
+                    optional_input_shape_defaults=optional_input_defaults,
                 ))
     else:
         ENABLED.clear()
@@ -342,6 +444,11 @@ async def enabled_handler(enabled: bool, nc: AsyncNextcloudApp) -> str:
             if supports_enhanced:
                 await nc.providers.task_processing.unregister(
                     provider_id_for(model_name, enhanced=True),
+                    True,
+                )
+            if supports_subtitles:
+                await nc.providers.task_processing.unregister(
+                    provider_id_for(model_name, subtitles=True),
                     True,
                 )
     return ""
