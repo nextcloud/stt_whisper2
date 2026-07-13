@@ -106,6 +106,17 @@ def provider_id_for(model_name: str, enhanced: bool = False, subtitles: bool = F
     return f"stt_whisper2:{model_name}"
 
 
+"""
+Extract provider details.
+
+Args:
+    provider (dict): The provider to parse.
+
+Returns:
+    str: Name of provider
+    bool: Whether the provider provides task to generate enhanced transcripts
+    bool: Whether the provider provides task to generate subtitles
+"""
 def parse_provider(provider: dict) -> tuple[str, bool, bool]:
     provider_id = provider.get("id")
     if not isinstance(provider_id, str) or ":" not in provider_id:
