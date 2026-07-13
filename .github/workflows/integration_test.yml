@@ -26,9 +26,12 @@ jobs:
       # do not stop on another job's failure
       fail-fast: false
       matrix:
-        php-versions: [ '8.2' ]
+        php-versions: [ '8.2', '8.3' ]
         databases: [ 'sqlite' ]
-        server-versions: [ 'stable30', 'stable31', 'stable32', 'stable33', 'master' ]
+        server-versions: [ 'stable30', 'stable31', 'stable32', 'stable33', 'stable34', 'master' ]
+        exclude:
+          - php-versions: '8.2'
+            server-versions: 'master'
 
     name: Integration test on ☁️${{ matrix.server-versions }} 🐘${{ matrix.php-versions }}
 
