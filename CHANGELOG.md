@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.5.0] - 2026-08-06
+
+### New
+- Add Silero VAD pre-filter for transcription (thanks to Nils Imdahl)
+- feat: implement generate subtitles provider (thanks to Edward Ly)
+- feat: support reformulating transcript into paragraphs (thanks to Lukas Schaefer)
+- Add support for nc 35
+
+### Fixed
+- fix: Catch ConnectionErrors (thanks to Marcel Klehr)
+- fix: Fix progress percentage (thanks to Lukas Schaefer)
+
 ## [2.4.2] - 2026-02-24
 
 ### Fixed
