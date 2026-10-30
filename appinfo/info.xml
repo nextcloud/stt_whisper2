@@ -67,6 +67,26 @@ Learn more about the Nextcloud Ethical AI Rating [in our blog](https://nextcloud
 				<display-name>Voice Activity Detection filter speech pad milliseconds</display-name>
 				<description>The time that speech chunks will be paded with silence by the VAD filter, as an integer. Default: 400</description>
 			</variable>
+			<variable>
+				<name>STT_WHISPER2_PER_TURN_LANGUAGE</name>
+				<display-name>Detect language per speaker turn</display-name>
+				<description>Set to 1 to detect the language separately for each pause-separated part of the recording. Fixes mixed-language recordings where the second language gets translated or dropped. Default: 0</description>
+			</variable>
+			<variable>
+				<name>STT_WHISPER2_PER_TURN_MIN_SILENCE_MS</name>
+				<display-name>Per-turn language: minimum pause (ms)</display-name>
+				<description>Pause length that splits the recording into turns, as an integer. Default: 1000</description>
+			</variable>
+			<variable>
+				<name>STT_WHISPER2_PER_TURN_MIN_DETECT_S</name>
+				<display-name>Per-turn language: minimum turn length for detection (s)</display-name>
+				<description>Shorter turns inherit the previous turn's language. Default: 3</description>
+			</variable>
+			<variable>
+				<name>STT_WHISPER2_PER_TURN_MIN_PROB</name>
+				<display-name>Per-turn language: minimum detection probability</display-name>
+				<description>Float between 0 and 1. Less certain turns inherit the previous turn's language. Default: 0.6</description>
+			</variable>
 		</environment-variables>
 	</external-app>
 </info>
