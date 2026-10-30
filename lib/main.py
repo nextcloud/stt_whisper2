@@ -33,6 +33,7 @@ from nc_py_api.ex_app.providers.task_processing import (
     TaskProcessingProvider,
 )
 from ocs import get_file
+from per_turn import PER_TURN_LANGUAGE, transcribe_per_turn
 
 # ---------Start of configuration values for manual deploy---------
 # Uncommenting the following lines may be useful when installing manually.
@@ -341,11 +342,15 @@ def background_thread_task():
             LOGGER.info("generating transcription")
             time_start = perf_counter()
             file_name = get_file(nc, task["id"], task.get("input").get('input'))
-            segments, info = model.transcribe(
-                file_name,
-                vad_filter=VAD_FILTER,
-                vad_parameters=VAD_PARAMETERS if VAD_FILTER else None,
-            )
+            vad_kwargs = {
+                "vad_filter": VAD_FILTER,
+                "vad_parameters": VAD_PARAMETERS if VAD_FILTER else None,
+            }
+            if PER_TURN_LANGUAGE:
+                # mixed-language audio: detect the language per pause-separated turn (#73)
+                segments, info = transcribe_per_turn(model, file_name, **vad_kwargs)
+            else:
+                segments, info = model.transcribe(file_name, **vad_kwargs)
 
             if subtitles:
                 if task['input']['format'] == 'vtt':
