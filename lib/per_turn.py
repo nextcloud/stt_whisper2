@@ -28,7 +28,7 @@ LOGGER = logging.getLogger(os.environ.get("APP_ID", "stt_whisper2") + ".per_turn
 
 SAMPLING_RATE = 16000
 
-PER_TURN_LANGUAGE = os.environ.get("STT_WHISPER2_PER_TURN_LANGUAGE", "0") == "1"
+PER_TURN_LANGUAGE = os.environ.get("STT_WHISPER2_PER_TURN_LANGUAGE", "1") == "1"
 try:
     MIN_SILENCE_MS = int(os.environ.get("STT_WHISPER2_PER_TURN_MIN_SILENCE_MS", "1000"))
     MIN_DETECT_S = float(os.environ.get("STT_WHISPER2_PER_TURN_MIN_DETECT_S", "3"))
