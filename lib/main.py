@@ -35,6 +35,9 @@ from nc_py_api.ex_app.providers.task_processing import (
 from ocs import get_file
 from per_turn import PER_TURN_LANGUAGE, transcribe_per_turn
 
+# rough share of the runtime spent on per-turn language detection, measured with large-v3-turbo
+PER_TURN_DETECTION_SHARE = 0.3
+
 # ---------Start of configuration values for manual deploy---------
 # Uncommenting the following lines may be useful when installing manually.
 
@@ -238,18 +241,19 @@ def start_bg_task():
     t = threading.Thread(target=background_thread_task)
     t.start()
 
-def build_transcript_text(segments, info, task_id, nc, enhanced) -> str:
+def progress_reporter(nc, task_id, start: float, end: float):
+    """Map the progress (0..1) of one processing phase onto the [start, end] percentage range of the task"""
+    return lambda fraction: nc.providers.task_processing.set_progress(task_id, start + fraction * (end - start))
+
+def build_transcript_text(segments, info, report_progress) -> str:
     transcript = ''
     for segment in segments:
         transcript += segment.text
-        percentage = ( segment.start / info.duration ) * 100
-        if enhanced:
-            percentage /= 2
-        nc.providers.task_processing.set_progress(task_id, percentage)
+        report_progress(segment.start / info.duration)
 
     return transcript
 
-def build_transcript_srt(segments, info, task_id, nc) -> str:
+def build_transcript_srt(segments, info, report_progress) -> str:
     transcript = ''
     i = 0
     for segment in segments:
@@ -262,12 +266,11 @@ def build_transcript_srt(segments, info, task_id, nc) -> str:
         end = strftime('%H:%M:%S', gmtime(end_int))
 
         transcript += f'{i}\n{start},{start_ms:03d} --> {end},{end_ms:03d}\n{segment.text}\n\n'
-        percentage = ( segment.start / info.duration ) * 100
-        nc.providers.task_processing.set_progress(task_id, percentage)
+        report_progress(segment.start / info.duration)
 
     return transcript
 
-def build_transcript_vtt(segments, info, task_id, nc) -> str:
+def build_transcript_vtt(segments, info, report_progress) -> str:
     transcript = 'WEBVTT\n\n'
     for segment in segments:
         start_frac, start_int = modf(segment.start)
@@ -278,8 +281,7 @@ def build_transcript_vtt(segments, info, task_id, nc) -> str:
         end = strftime('%H:%M:%S', gmtime(end_int))
 
         transcript += f'{start}.{start_ms:03d} --> {end}.{end_ms:03d}\n{segment.text}\n\n'
-        percentage = ( segment.start / info.duration ) * 100
-        nc.providers.task_processing.set_progress(task_id, percentage)
+        report_progress(segment.start / info.duration)
 
     return transcript
 
@@ -346,19 +348,29 @@ def background_thread_task():
                 "vad_filter": VAD_FILTER,
                 "vad_parameters": VAD_PARAMETERS if VAD_FILTER else None,
             }
+            # the enhanced provider reserves the second half of the progress for the reformulation
+            transcription_end = 50 if enhanced else 100
             if PER_TURN_LANGUAGE:
                 # mixed-language audio: detect the language per pause-separated turn (#73)
-                segments, info = transcribe_per_turn(model, file_name, **vad_kwargs)
+                # Report progress during detection as well, otherwise the Assistant UI estimates
+                # progress from the expected runtime and jumps back once the first segment arrives
+                detection_end = transcription_end * PER_TURN_DETECTION_SHARE
+                segments, info = transcribe_per_turn(
+                    model, file_name, **vad_kwargs,
+                    on_progress=progress_reporter(nc, task['id'], 0, detection_end),
+                )
             else:
+                detection_end = 0
                 segments, info = model.transcribe(file_name, **vad_kwargs)
 
+            report_progress = progress_reporter(nc, task['id'], detection_end, transcription_end)
             if subtitles:
                 if task['input']['format'] == 'vtt':
-                    transcript = build_transcript_vtt(segments, info, task['id'], nc)
+                    transcript = build_transcript_vtt(segments, info, report_progress)
                 else:
-                    transcript = build_transcript_srt(segments, info, task['id'], nc)
+                    transcript = build_transcript_srt(segments, info, report_progress)
             else:
-                transcript = build_transcript_text(segments, info, task['id'], nc, enhanced)
+                transcript = build_transcript_text(segments, info, report_progress)
             del model
             LOGGER.info(f"transcription generated: {perf_counter() - time_start}s")
 

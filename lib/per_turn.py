@@ -19,7 +19,7 @@ A single-language file becomes one span that covers the whole recording.
 import dataclasses
 import logging
 import os
-from typing import Iterator, Optional
+from typing import Callable, Iterator, Optional
 
 from faster_whisper.audio import decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps
@@ -40,8 +40,12 @@ except ValueError:
 def detect_spans(model, audio, vad_threshold: float = 0.5,
                  min_silence_ms: int = MIN_SILENCE_MS,
                  min_detect_s: float = MIN_DETECT_S,
-                 min_prob: float = MIN_PROB) -> list[dict]:
-    """Return spans [{'start': sample, 'end': sample, 'language': str|None}] covering the whole audio."""
+                 min_prob: float = MIN_PROB,
+                 on_progress: Optional[Callable[[float], None]] = None) -> list[dict]:
+    """Return spans [{'start': sample, 'end': sample, 'language': str|None}] covering the whole audio.
+
+    on_progress, if given, is called with the fraction (0..1) of the audio scanned so far.
+    """
     total = len(audio)
     chunks = get_speech_timestamps(
         audio,
@@ -61,6 +65,8 @@ def detect_spans(model, audio, vad_threshold: float = 0.5,
             LOGGER.debug(f"chunk {c['start']/SAMPLING_RATE:.1f}-{c['end']/SAMPLING_RATE:.1f}s: {detected} p={prob:.2f}")
             if prob >= min_prob:
                 lang = detected
+            if on_progress is not None:
+                on_progress(c["end"] / total)
         if lang is None:
             lang = prev
         langs.append(lang)
@@ -92,11 +98,15 @@ def _shift(segment, offset: float, new_id: int):
 
 
 def transcribe_per_turn(model, file_name, vad_filter: bool = True,
-                        vad_parameters: Optional[dict] = None, **kwargs):
-    """Drop-in replacement for model.transcribe(file_name, vad_filter=..., vad_parameters=...)."""
+                        vad_parameters: Optional[dict] = None,
+                        on_progress: Optional[Callable[[float], None]] = None, **kwargs):
+    """Drop-in replacement for model.transcribe(file_name, vad_filter=..., vad_parameters=...).
+
+    on_progress reports the language detection phase, which runs before any segment is produced.
+    """
     audio = decode_audio(file_name, sampling_rate=SAMPLING_RATE)
     vad_threshold = (vad_parameters or {}).get("threshold", 0.5)
-    spans = detect_spans(model, audio, vad_threshold=vad_threshold)
+    spans = detect_spans(model, audio, vad_threshold=vad_threshold, on_progress=on_progress)
     LOGGER.info("per-turn spans: " + ", ".join(
         f"{s['start']/SAMPLING_RATE:.1f}-{s['end']/SAMPLING_RATE:.1f}s={s['language']}" for s in spans
     ))

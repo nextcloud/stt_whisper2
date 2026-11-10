@@ -135,6 +135,15 @@ def test_thresholds_are_respected(stub_audio):
     assert langs(per_turn.detect_spans(model, audio, min_detect_s=5.5)) == ["de"]
 
 
+def test_detection_reports_progress(stub_audio):
+    audio = stub_audio(40, [(0, 10), (12, 13), (15, 40)])
+    model = FakeModel({10.0: ("en", 0.9), 25.0: ("en", 0.9)})
+    progress = []
+    per_turn.detect_spans(model, audio, on_progress=progress.append)
+    # reported once per detected chunk (the 1 s chunk is too short), up to the end of the last chunk
+    assert progress == [0.25, 1.0]
+
+
 # --- transcribe_per_turn ------------------------------------------------------
 
 def test_segments_are_shifted_to_recording_time_and_renumbered(stub_audio):
