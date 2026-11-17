@@ -1,8 +1,13 @@
 FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04
 
+# Ubuntu 22.04 only ships Python 3.10, so get 3.12 from the deadsnakes PPA
 RUN \
   apt update && \
-  apt install -y python3 python3-pip curl
+  apt install -y software-properties-common && \
+  add-apt-repository -y ppa:deadsnakes/ppa && \
+  apt update && \
+  apt install -y python3.12 python3.12-venv pipx curl && \
+  rm -rf /var/lib/apt/lists/*
 
 # Download and install FRP client with checksum verification
 # FRP version and checksums - update these when upgrading
@@ -35,7 +40,17 @@ RUN set -ex; \
     rm -rf /tmp/frp_${FRP_VERSION}_linux_${FRP_ARCH} /tmp/frp.tar.gz; \
     echo "FRP client installed successfully"
 
-COPY requirements.txt /
+RUN pipx install poetry
+ENV POETRY_VIRTUALENVS_IN_PROJECT=1
+ENV PATH="/root/.local/bin:${PATH}"
+ENV VIRTUAL_ENV=/opt/app/.venv PATH="/opt/app/.venv/bin:${PATH}"
+
+# Install requirements into /opt/app/.venv
+WORKDIR /opt/app
+COPY pyproject.toml poetry.lock ./
+RUN python3.12 -m venv /opt/app/.venv && \
+  poetry install --no-root && rm -rf ~/.cache
+
 COPY healthcheck.sh /
 COPY --chmod=775 start.sh /
 
@@ -46,11 +61,8 @@ ADD l10[n] /app/l10n
 ADD li[b] /app/lib
 ADD model[s] /app/models
 
-RUN \
-  python3 -m pip install -r requirements.txt && rm -rf ~/.cache && rm requirements.txt
-
 WORKDIR /app/lib
-ENTRYPOINT ["/start.sh", "python3", "main.py"]
+ENTRYPOINT ["/start.sh", "/opt/app/.venv/bin/python", "main.py"]
 
 LABEL org.opencontainers.image.source=https://github.com/nextcloud/stt_whisper2
 HEALTHCHECK --interval=2s --timeout=2s --retries=300 CMD /healthcheck.sh

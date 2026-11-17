@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[tool.poetry]
+name = "stt_whisper2"
+description = "Local Whisper Speech To Text"
+authors = ["Marcel Klehr <mklehr@gmx.net>"]
+license = "AGPL-3.0-or-later"
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+# ctranslate2 4.4.0 has no wheels for Python > 3.12
+python = ">=3.12,<3.13"
+nc-py-api = {version = "0.22.0", extras = ["app"]}
+pydantic = "^2.12"
+faster-whisper = "^1.2.0"
+python-multipart = ">=0.0.20"
+# ctranslate2 4.4.0 needs cuDNN 8 + cuBLAS 12, matching the Docker base image
+ctranslate2 = "4.4.0"
+niquests = "^3.15"
+requests = "^2.32"
+av = ">=16,<19"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

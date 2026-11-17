@@ -4,8 +4,9 @@ Unit tests for lib/per_turn.py (per-turn language detection, issue #73).
 No Whisper model is needed: the model is a fake, and VAD is either stubbed
 or (in the last test) the real bundled Silero VAD on test/res/jfk.wav.
 
-    pip install -r requirements.txt pytest
-    pytest test/test_per_turn.py
+    poetry install --no-root
+    poetry run pip install pytest
+    poetry run pytest test/test_per_turn.py
 """
 
 import sys

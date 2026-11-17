@@ -38,7 +38,7 @@
 /renovate.json
 /stylelint.config.js
 /webpack.*
-/requirements.txt
+/poetry.lock
 /Dockerfile
 /results
 tests
