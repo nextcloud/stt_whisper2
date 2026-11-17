@@ -225,9 +225,6 @@ async def lifespan(_app: FastAPI):
         enabled_handler,
         trigger_handler=trigger_handler
     )
-    nc = NextcloudApp()
-    if nc.enabled_state:
-        ENABLED.set()
     start_bg_task()
     yield
 
@@ -291,6 +288,17 @@ def background_thread_task():
     global LAST_MODEL
 
     nc = NextcloudApp()
+    # Nextcloud may not be reachable yet when we start (e.g. after a host reboot), and the enabled
+    # handler is not called again for an already enabled app, so retry until we get an answer (#78)
+    while True:
+        try:
+            if nc.ocs("GET", "/ocs/v1.php/apps/app_api/ex-app/state"):
+                ENABLED.set()
+            break
+        except Exception as e:
+            LOGGER.info(f"Could not fetch enabled state from Nextcloud, will retry: {e}")
+            sleep(5)
+
     while True:
         while not ENABLED.is_set():
             sleep(5)
