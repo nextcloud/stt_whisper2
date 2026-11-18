@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.6.0] - 2026-11-17
+### New
+ - Support for Nextcloud 36
+ - feat: per-turn language detection for mixed-language audio (Thanks to Boris Janjetovic)
+
+### Fixed
+* fix: Retry fetching enabled state until Nextcloud is reachable
+* fix: Make all phases report progress during per-turn processing
+* chore(HaRP-frp): install FRP from releases 
+
 ## [2.5.0] - 2026-08-06
 
 ### New
